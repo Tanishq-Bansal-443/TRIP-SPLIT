@@ -22,6 +22,13 @@ export type AuthState = {
   error?: string;
 };
 
+function getSafeRedirectUrl(url?: string | null): string {
+  if (url && url.startsWith("/") && !url.startsWith("//")) {
+    return url;
+  }
+  return "/dashboard";
+}
+
 export async function registerAction(
   _prevState: AuthState | null,
   formData: FormData
@@ -68,7 +75,7 @@ export async function registerAction(
   }
 
   const redirectUrl = formData.get("redirect")?.toString();
-  redirect(redirectUrl || "/dashboard");
+  redirect(getSafeRedirectUrl(redirectUrl));
 }
 
 export async function loginAction(
@@ -112,7 +119,7 @@ export async function loginAction(
   }
 
   const redirectUrl = formData.get("redirect")?.toString();
-  redirect(redirectUrl || "/dashboard");
+  redirect(getSafeRedirectUrl(redirectUrl));
 }
 
 export async function logoutAction(): Promise<void> {

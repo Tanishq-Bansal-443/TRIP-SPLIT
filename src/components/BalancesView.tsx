@@ -237,6 +237,7 @@ export function BalancesView({
       {/* Prefilled Settle Up Modal */}
       {selectedSettlement && (
         <SettleUpModal
+          key={`${selectedSettlement.fromUserId}-${selectedSettlement.toUserId}-${selectedSettlement.amountPaise}`}
           groupId={groupId}
           members={members}
           currentUserId={currentUserId}

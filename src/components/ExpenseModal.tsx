@@ -58,6 +58,28 @@ const CATEGORIES = [
   { id: "GENERAL", label: "General", icon: Package },
 ];
 
+function computeEvenPercentages(members: Member[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  if (members.length === 0) return map;
+  const base = Math.floor((100 / members.length) * 10) / 10;
+  let remainder = Math.round((100 - base * members.length) * 10) / 10;
+  members.forEach((m) => {
+    let val = base;
+    if (remainder > 0.001) {
+      val = Math.round((val + 0.1) * 10) / 10;
+      remainder = Math.round((remainder - 0.1) * 10) / 10;
+    }
+    map[m.id] = val.toFixed(1);
+  });
+  return map;
+}
+
+function getSafeDateString(dateVal?: string | Date): string {
+  if (!dateVal) return new Date().toISOString().split("T")[0];
+  const d = new Date(dateVal);
+  return isNaN(d.getTime()) ? new Date().toISOString().split("T")[0] : d.toISOString().split("T")[0];
+}
+
 export function ExpenseModal({
   groupId,
   members,
@@ -75,11 +97,7 @@ export function ExpenseModal({
     expenseToEdit ? (expenseToEdit.amountPaise / 100).toString() : ""
   );
   const [payerId, setPayerId] = useState(expenseToEdit?.payerId || currentUserId);
-  const [date, setDate] = useState(
-    expenseToEdit
-      ? new Date(expenseToEdit.date).toISOString().split("T")[0]
-      : new Date().toISOString().split("T")[0]
-  );
+  const [date, setDate] = useState(() => getSafeDateString(expenseToEdit?.date));
   const [category, setCategory] = useState(expenseToEdit?.category || "FOOD");
   const [splitType, setSplitType] = useState<SplitType>(
     expenseToEdit?.splitType || "EQUAL"
@@ -111,13 +129,9 @@ export function ExpenseModal({
       expenseToEdit.splits.forEach((s) => {
         map[s.userId] = (s.shareValue ?? 0).toString();
       });
-    } else {
-      const even = (100 / members.length).toFixed(1);
-      members.forEach((m) => {
-        map[m.id] = even;
-      });
+      return map;
     }
-    return map;
+    return computeEvenPercentages(members);
   });
 
   // For SHARES: Record<userId, sharesString>
@@ -138,15 +152,80 @@ export function ExpenseModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const resetForm = () => {
+    setError(null);
+    if (expenseToEdit) {
+      setDescription(expenseToEdit.description);
+      setAmountRupees((expenseToEdit.amountPaise / 100).toString());
+      setPayerId(expenseToEdit.payerId);
+      setDate(getSafeDateString(expenseToEdit.date));
+      setCategory(expenseToEdit.category);
+      setSplitType(expenseToEdit.splitType);
+      setEqualParticipants(expenseToEdit.splits.map((s) => s.userId));
+
+      const exactMap: Record<string, string> = {};
+      if (expenseToEdit.splitType === "EXACT") {
+        expenseToEdit.splits.forEach((s) => {
+          exactMap[s.userId] = (s.amountPaise / 100).toString();
+        });
+      }
+      setExactAmounts(exactMap);
+
+      if (expenseToEdit.splitType === "PERCENTAGE") {
+        const pctMap: Record<string, string> = {};
+        expenseToEdit.splits.forEach((s) => {
+          pctMap[s.userId] = (s.shareValue ?? 0).toString();
+        });
+        setPercentages(pctMap);
+      } else {
+        setPercentages(computeEvenPercentages(members));
+      }
+
+      const sharesMap: Record<string, string> = {};
+      if (expenseToEdit.splitType === "SHARES") {
+        expenseToEdit.splits.forEach((s) => {
+          sharesMap[s.userId] = (s.shareValue ?? 1).toString();
+        });
+      } else {
+        members.forEach((m) => {
+          sharesMap[m.id] = "1";
+        });
+      }
+      setShares(sharesMap);
+    } else {
+      setDescription("");
+      setAmountRupees("");
+      setPayerId(currentUserId);
+      setDate(new Date().toISOString().split("T")[0]);
+      setCategory("FOOD");
+      setSplitType("EQUAL");
+      setEqualParticipants(members.map((m) => m.id));
+      setExactAmounts({});
+      setPercentages(computeEvenPercentages(members));
+      const sharesMap: Record<string, string> = {};
+      members.forEach((m) => {
+        sharesMap[m.id] = "1";
+      });
+      setShares(sharesMap);
+    }
+  };
+
+  const handleOpen = () => {
+    resetForm();
+    setIsOpen(true);
+  };
+
   // Calculations for live validation
   const parsedAmount = parseFloat(amountRupees) || 0;
 
-  // Exact validation
-  const exactSum = Object.values(exactAmounts).reduce(
-    (sum, val) => sum + (parseFloat(val) || 0),
+  // Exact validation using integer paise arithmetic to prevent float drift
+  const exactSumPaise = Object.values(exactAmounts).reduce(
+    (sum, val) => sum + Math.round((parseFloat(val) || 0) * 100),
     0
   );
-  const exactDiff = parsedAmount - exactSum;
+  const targetAmountPaise = Math.round(parsedAmount * 100);
+  const exactDiffPaise = targetAmountPaise - exactSumPaise;
+  const exactDiff = exactDiffPaise / 100;
 
   // Percentage validation
   const percentageSum = Object.values(percentages).reduce(
@@ -264,6 +343,7 @@ export function ExpenseModal({
         }
       }
 
+      resetForm();
       setIsOpen(false);
       if (onSuccess) onSuccess();
     } catch {
@@ -276,10 +356,10 @@ export function ExpenseModal({
   return (
     <>
       {triggerButton ? (
-        <div onClick={() => setIsOpen(true)}>{triggerButton}</div>
+        <div onClick={handleOpen}>{triggerButton}</div>
       ) : (
         <button
-          onClick={() => setIsOpen(true)}
+          onClick={handleOpen}
           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm text-white bg-emerald-600 hover:bg-emerald-500 shadow-md shadow-emerald-600/30 transition-all hover:scale-[1.02] active:scale-[0.98]"
         >
           <Plus className="w-4 h-4" />
@@ -597,7 +677,7 @@ export function ExpenseModal({
                               <div className="relative w-28">
                                 <input
                                   type="number"
-                                  step="0.1"
+                                  step="any"
                                   min="0"
                                   max="100"
                                   placeholder="0"

@@ -72,6 +72,35 @@ export async function createExpenseAction(input: {
     const parsed = createExpenseSchema.parse(input);
     const totalAmountPaise = rupeesToPaise(parsed.amountRupees);
 
+    // Verify all participants are unique
+    const participantUserIds = new Set<string>();
+    for (const p of parsed.participants) {
+      if (participantUserIds.has(p.userId)) {
+        return { error: "Duplicate participant found in expense split." };
+      }
+      participantUserIds.add(p.userId);
+    }
+
+    // Verify payer and all participants belong to the group
+    const groupMemberIds = new Set(
+      (
+        await prisma.groupMember.findMany({
+          where: { groupId: parsed.groupId },
+          select: { userId: true },
+        })
+      ).map((m) => m.userId)
+    );
+
+    if (!groupMemberIds.has(parsed.payerId)) {
+      return { error: "Payer must be a member of this trip group." };
+    }
+
+    for (const p of parsed.participants) {
+      if (!groupMemberIds.has(p.userId)) {
+        return { error: "All split participants must be members of this trip group." };
+      }
+    }
+
     // Calculate splits with integer paise and remainder distribution
     const splitAllocations = parsed.participants.map((p) => ({
       userId: p.userId,
@@ -86,7 +115,9 @@ export async function createExpenseAction(input: {
       splitAllocations
     );
 
-    const expenseDate = parsed.date ? new Date(parsed.date) : new Date();
+    const expenseDate = parsed.date && !isNaN(new Date(parsed.date).getTime())
+      ? new Date(parsed.date)
+      : new Date();
 
     const createdExpense = await prisma.$transaction(async (tx) => {
       const expense = await tx.expense.create({
@@ -112,6 +143,7 @@ export async function createExpenseAction(input: {
     });
 
     revalidatePath(`/groups/${input.groupId}`);
+    revalidatePath("/dashboard");
     return { success: true, id: createdExpense.id };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to record expense";
@@ -156,6 +188,35 @@ export async function updateExpenseAction(
     const parsed = createExpenseSchema.parse(input);
     const totalAmountPaise = rupeesToPaise(parsed.amountRupees);
 
+    // Verify all participants are unique
+    const participantUserIds = new Set<string>();
+    for (const p of parsed.participants) {
+      if (participantUserIds.has(p.userId)) {
+        return { error: "Duplicate participant found in expense split." };
+      }
+      participantUserIds.add(p.userId);
+    }
+
+    // Verify payer and all participants belong to the group
+    const groupMemberIds = new Set(
+      (
+        await prisma.groupMember.findMany({
+          where: { groupId: parsed.groupId },
+          select: { userId: true },
+        })
+      ).map((m) => m.userId)
+    );
+
+    if (!groupMemberIds.has(parsed.payerId)) {
+      return { error: "Payer must be a member of this trip group." };
+    }
+
+    for (const p of parsed.participants) {
+      if (!groupMemberIds.has(p.userId)) {
+        return { error: "All split participants must be members of this trip group." };
+      }
+    }
+
     const splitAllocations = parsed.participants.map((p) => ({
       userId: p.userId,
       exactAmountPaise: p.exactAmountRupees !== undefined ? rupeesToPaise(p.exactAmountRupees) : undefined,
@@ -169,7 +230,9 @@ export async function updateExpenseAction(
       splitAllocations
     );
 
-    const expenseDate = parsed.date ? new Date(parsed.date) : new Date();
+    const expenseDate = parsed.date && !isNaN(new Date(parsed.date).getTime())
+      ? new Date(parsed.date)
+      : new Date();
 
     await prisma.$transaction(async (tx) => {
       // Delete existing splits
@@ -199,6 +262,7 @@ export async function updateExpenseAction(
     });
 
     revalidatePath(`/groups/${input.groupId}`);
+    revalidatePath("/dashboard");
     return { success: true, id: expenseId };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to update expense";
@@ -231,6 +295,7 @@ export async function deleteExpenseAction(
     });
 
     revalidatePath(`/groups/${groupId}`);
+    revalidatePath("/dashboard");
     return { success: true };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to delete expense";
@@ -267,8 +332,24 @@ export async function recordSettlementAction(input: {
       return { error: "Payer and recipient cannot be the same member." };
     }
 
+    // Verify payer and payee belong to the group
+    const groupMemberIds = new Set(
+      (
+        await prisma.groupMember.findMany({
+          where: { groupId: parsed.groupId },
+          select: { userId: true },
+        })
+      ).map((m) => m.userId)
+    );
+
+    if (!groupMemberIds.has(parsed.payerId) || !groupMemberIds.has(parsed.payeeId)) {
+      return { error: "Both paying and receiving members must belong to this trip group." };
+    }
+
     const amountPaise = rupeesToPaise(parsed.amountRupees);
-    const settlementDate = parsed.date ? new Date(parsed.date) : new Date();
+    const settlementDate = parsed.date && !isNaN(new Date(parsed.date).getTime())
+      ? new Date(parsed.date)
+      : new Date();
 
     const settlement = await prisma.settlement.create({
       data: {
@@ -282,6 +363,7 @@ export async function recordSettlementAction(input: {
     });
 
     revalidatePath(`/groups/${input.groupId}`);
+    revalidatePath("/dashboard");
     return { success: true, id: settlement.id };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to record settlement";
@@ -313,6 +395,7 @@ export async function deleteSettlementAction(
     });
 
     revalidatePath(`/groups/${groupId}`);
+    revalidatePath("/dashboard");
     return { success: true };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to delete settlement";

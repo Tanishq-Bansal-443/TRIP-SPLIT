@@ -42,7 +42,10 @@ export function SettlementsList({
     }
     setDeletingId(id);
     try {
-      await deleteSettlementAction(groupId, id);
+      const res = await deleteSettlementAction(groupId, id);
+      if (res?.error) {
+        alert(res.error);
+      }
     } catch {
       alert("Failed to delete settlement.");
     } finally {

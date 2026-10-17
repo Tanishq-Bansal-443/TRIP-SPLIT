@@ -86,14 +86,14 @@ export default async function GroupPage({ params }: GroupPageProps) {
             },
           },
         },
-        orderBy: { date: "desc" },
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       },
       settlements: {
         include: {
           payer: { select: { id: true, name: true } },
           payee: { select: { id: true, name: true } },
         },
-        orderBy: { date: "desc" },
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       },
     },
   });

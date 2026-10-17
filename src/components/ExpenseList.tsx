@@ -86,7 +86,10 @@ export function ExpenseList({
     }
     setDeletingId(expenseId);
     try {
-      await deleteExpenseAction(groupId, expenseId);
+      const res = await deleteExpenseAction(groupId, expenseId);
+      if (res?.error) {
+        alert(res.error);
+      }
     } catch {
       alert("Failed to delete expense. Please try again.");
     } finally {

@@ -105,12 +105,12 @@ export function calculatePercentageSplits(
     );
   }
 
-  // Calculate base paise and fractional reminders
+  // Calculate base paise and fractional remainders using totalPercentage for exact proportionality
   const rawSplits = allocations.map((a) => {
     if (a.percentage < 0) {
       throw new Error(`Percentage cannot be negative for user ${a.userId}`);
     }
-    const rawPaise = (totalAmountPaise * a.percentage) / 100;
+    const rawPaise = (totalAmountPaise * a.percentage) / totalPercentage;
     const basePaise = Math.floor(rawPaise);
     const fraction = rawPaise - basePaise;
     return {

@@ -85,6 +85,16 @@ describe("Split Calculations & Remainder Allocation", () => {
     expect(total).toBe(10000);
   });
 
+  it("handles percentages slightly above 100 within tolerance without overflow", () => {
+    // ₹1000 with 50.02% + 50.02% = 100.04% (diff <= 0.05)
+    const splits = computeExpenseSplits(100000, "PERCENTAGE", [
+      { userId: "u1", percentage: 50.02 },
+      { userId: "u2", percentage: 50.02 },
+    ]);
+    expect(splits).toHaveLength(2);
+    expect(splits[0].amountPaise + splits[1].amountPaise).toBe(100000);
+  });
+
   it("throws error when percentages do not sum to 100", () => {
     expect(() =>
       calculatePercentageSplits(10000, [
